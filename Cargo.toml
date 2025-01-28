@@ -1,0 +1,15 @@
+[package]
+name = "vigilant"
+version = "1.0.0"
+edition = "2021"
+description = "The Rust SDK for the Vigilant platform."
+license = "MIT"
+repository = "https://github.com/vigilant-run/vigilant-rust"
+homepage = "https://vigilant.run"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+reqwest = { version = "0.11", features = ["blocking", "json"] }
+time = "0.3"
+chrono = "0.4"
