@@ -106,8 +106,6 @@ impl Logger {
 
     pub fn shutdown(&self) -> std::io::Result<()> {
         self.inner.stop_signal.store(true, Ordering::SeqCst);
-
-        // Only one thread should join the worker
         if let Ok(mut handle) = self.inner.worker_handle.lock() {
             if let Some(h) = handle.take() {
                 let _ = h.join();
@@ -171,29 +169,38 @@ impl Logger {
         let max_batch_size = 100;
         let batch_interval = Duration::from_millis(100);
         let mut buffer = Vec::with_capacity(max_batch_size);
+        let client = reqwest::blocking::Client::new();
 
-        while !stop_signal.load(Ordering::SeqCst) {
+        loop {
             match rx.recv_timeout(batch_interval) {
                 Ok(msg) => {
                     buffer.push(msg);
                     if buffer.len() >= max_batch_size {
-                        Self::send_batch(&endpoint, &token, &mut buffer);
+                        Self::send_batch(&client, &endpoint, &token, &mut buffer);
                     }
                 }
                 Err(_timeout_or_disconnect) => {
                     if !buffer.is_empty() {
-                        Self::send_batch(&endpoint, &token, &mut buffer);
+                        Self::send_batch(&client, &endpoint, &token, &mut buffer);
+                    }
+                    if stop_signal.load(Ordering::SeqCst) {
+                        break;
                     }
                 }
             }
         }
 
         if !buffer.is_empty() {
-            Self::send_batch(&endpoint, &token, &mut buffer);
+            Self::send_batch(&client, &endpoint, &token, &mut buffer);
         }
     }
 
-    fn send_batch(endpoint: &str, token: &str, buffer: &mut Vec<LogMessage>) {
+    fn send_batch(
+        client: &reqwest::blocking::Client,
+        endpoint: &str,
+        token: &str,
+        buffer: &mut Vec<LogMessage>,
+    ) {
         if buffer.is_empty() {
             return;
         }
@@ -203,7 +210,6 @@ impl Logger {
             logs: buffer.drain(..).collect(),
         };
 
-        let client = reqwest::blocking::Client::new();
         if let Err(e) = client
             .post(endpoint)
             .json(&current_batch)

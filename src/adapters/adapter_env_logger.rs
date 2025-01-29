@@ -42,10 +42,6 @@ impl Log for EnvLoggerAdapter {
     fn log(&self, record: &Record) {
         self.inner.env_logger.log(record);
 
-        if !self.enabled(record.metadata()) {
-            return;
-        }
-
         let level = match record.level() {
             Level::Error => LogLevel::ERROR,
             Level::Warn => LogLevel::WARNING,

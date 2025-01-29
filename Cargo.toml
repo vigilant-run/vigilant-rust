@@ -1,6 +1,6 @@
 [package]
 name = "vigilant"
-version = "1.0.3"
+version = "1.0.4"
 edition = "2021"
 description = "The Rust SDK for the Vigilant platform."
 license = "MIT"
