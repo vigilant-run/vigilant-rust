@@ -3,24 +3,26 @@ use crate::{logger::Logger as VigilantLogger, EnvLoggerAdapterBuilder};
 use env_logger::{Builder as EnvLoggerBuilder, Logger as EnvLogger};
 use log::{Level, Log, Metadata, Record};
 use std::sync::Arc;
-use std::sync::Mutex;
 
+#[derive(Clone)]
 pub struct EnvLoggerAdapter {
-    env_logger: EnvLogger,
-    vigilant_logger: Arc<Mutex<VigilantLogger>>,
+    inner: Arc<EnvLoggerAdapterInner>,
+}
+
+struct EnvLoggerAdapterInner {
+    env_logger: Arc<EnvLogger>,
+    vigilant_logger: VigilantLogger,
 }
 
 impl EnvLoggerAdapter {
-    pub fn new(vigilant_logger: VigilantLogger) -> Result<Arc<Self>, log::SetLoggerError> {
+    pub fn new(vigilant_logger: VigilantLogger) -> Self {
         let env_logger = EnvLoggerBuilder::from_default_env().build();
-        let adapter = Arc::new(Self {
-            env_logger,
-            vigilant_logger: Arc::new(Mutex::new(vigilant_logger)),
-        });
-
-        log::set_max_level(log::LevelFilter::Debug);
-        log::set_boxed_logger(Box::new(Arc::clone(&adapter)))?;
-        Ok(adapter)
+        Self {
+            inner: Arc::new(EnvLoggerAdapterInner {
+                env_logger: Arc::new(env_logger),
+                vigilant_logger,
+            }),
+        }
     }
 
     pub fn builder<'a>() -> EnvLoggerAdapterBuilder<'a> {
@@ -28,40 +30,35 @@ impl EnvLoggerAdapter {
     }
 
     pub fn shutdown(&self) -> std::io::Result<()> {
-        if let Ok(mut logger) = self.vigilant_logger.lock() {
-            logger.shutdown()?;
-        }
-        Ok(())
+        self.inner.vigilant_logger.shutdown()
     }
 }
 
 impl Log for EnvLoggerAdapter {
     fn enabled(&self, metadata: &Metadata) -> bool {
-        self.env_logger.enabled(metadata)
+        self.inner.env_logger.enabled(metadata)
     }
 
     fn log(&self, record: &Record) {
-        self.env_logger.log(record);
+        self.inner.env_logger.log(record);
 
         if !self.enabled(record.metadata()) {
             return;
         }
 
-        if let Ok(logger) = self.vigilant_logger.lock() {
-            let level = match record.level() {
-                Level::Error => LogLevel::ERROR,
-                Level::Warn => LogLevel::WARNING,
-                Level::Info => LogLevel::INFO,
-                Level::Debug | Level::Trace => LogLevel::DEBUG,
-            };
+        let level = match record.level() {
+            Level::Error => LogLevel::ERROR,
+            Level::Warn => LogLevel::WARNING,
+            Level::Info => LogLevel::INFO,
+            Level::Debug | Level::Trace => LogLevel::DEBUG,
+        };
 
-            let message = record.args().to_string();
-            match level {
-                LogLevel::ERROR => logger.error(&message),
-                LogLevel::WARNING => logger.warn(&message),
-                LogLevel::INFO => logger.info(&message),
-                LogLevel::DEBUG => logger.debug(&message),
-            }
+        let message = record.args().to_string();
+        match level {
+            LogLevel::ERROR => self.inner.vigilant_logger.error(&message),
+            LogLevel::WARNING => self.inner.vigilant_logger.warn(&message),
+            LogLevel::INFO => self.inner.vigilant_logger.info(&message),
+            LogLevel::DEBUG => self.inner.vigilant_logger.debug(&message),
         }
     }
 

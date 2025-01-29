@@ -1,15 +1,17 @@
-use crate::{EnvLoggerAdapter, LoggerBuilder};
+use crate::{LoggerBuilder, TracingAdapter};
+use tracing::level_filters::LevelFilter;
 
-pub struct EnvLoggerAdapterBuilder<'a> {
+pub struct TracingAdapterBuilder<'a> {
     name: &'a str,
     endpoint: &'a str,
     token: &'a str,
     passthrough: bool,
     insecure: bool,
     noop: bool,
+    level_filter: LevelFilter,
 }
 
-impl<'a> EnvLoggerAdapterBuilder<'a> {
+impl<'a> TracingAdapterBuilder<'a> {
     pub fn new() -> Self {
         Self {
             name: "sample-app",
@@ -18,6 +20,7 @@ impl<'a> EnvLoggerAdapterBuilder<'a> {
             passthrough: false,
             insecure: false,
             noop: false,
+            level_filter: LevelFilter::INFO,
         }
     }
 
@@ -51,7 +54,12 @@ impl<'a> EnvLoggerAdapterBuilder<'a> {
         self
     }
 
-    pub fn build(self) -> EnvLoggerAdapter {
+    pub fn level_filter(mut self, level_filter: LevelFilter) -> Self {
+        self.level_filter = level_filter;
+        self
+    }
+
+    pub fn build(self) -> TracingAdapter {
         let vigilant_logger = LoggerBuilder::new()
             .name(self.name)
             .endpoint(self.endpoint)
@@ -61,6 +69,6 @@ impl<'a> EnvLoggerAdapterBuilder<'a> {
             .noop(self.noop)
             .build();
 
-        EnvLoggerAdapter::new(vigilant_logger)
+        TracingAdapter::new(vigilant_logger, self.level_filter)
     }
 }

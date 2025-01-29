@@ -2,7 +2,7 @@ use chrono::Utc;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     mpsc::{channel, Receiver, Sender},
-    Arc,
+    Arc, Mutex,
 };
 use std::thread;
 use std::time::Duration;
@@ -13,10 +13,24 @@ pub struct Logger {
     name: String,
     passthrough: bool,
     noop: bool,
+    inner: Arc<LoggerInner>,
+}
 
+struct LoggerInner {
     tx: Sender<LogMessage>,
     stop_signal: Arc<AtomicBool>,
-    worker_handle: Option<thread::JoinHandle<()>>,
+    worker_handle: Mutex<Option<thread::JoinHandle<()>>>,
+}
+
+impl Clone for Logger {
+    fn clone(&self) -> Self {
+        Self {
+            name: self.name.clone(),
+            passthrough: self.passthrough,
+            noop: self.noop,
+            inner: Arc::clone(&self.inner),
+        }
+    }
 }
 
 impl Logger {
@@ -42,17 +56,19 @@ impl Logger {
         let stop_signal = Arc::new(AtomicBool::new(false));
         let stop_signal_cloned = Arc::clone(&stop_signal);
 
-        let worker_handle = Some(thread::spawn(move || {
+        let worker_handle = thread::spawn(move || {
             Self::run_batcher(rx, formatted_endpoint, token, stop_signal_cloned);
-        }));
+        });
 
         Logger {
             name,
             passthrough,
             noop,
-            tx,
-            stop_signal,
-            worker_handle,
+            inner: Arc::new(LoggerInner {
+                tx,
+                stop_signal,
+                worker_handle: Mutex::new(Some(worker_handle)),
+            }),
         }
     }
 
@@ -72,11 +88,30 @@ impl Logger {
         self.log(LogLevel::ERROR, message, None, Vec::new());
     }
 
-    pub fn shutdown(&mut self) -> std::io::Result<()> {
-        self.stop_signal.store(true, Ordering::SeqCst);
+    pub fn debug_with_attrs(&self, message: &str, attrs: impl IntoIterator<Item = Attribute>) {
+        self.log(LogLevel::DEBUG, message, None, attrs);
+    }
 
-        if let Some(handle) = self.worker_handle.take() {
-            let _ = handle.join();
+    pub fn warn_with_attrs(&self, message: &str, attrs: impl IntoIterator<Item = Attribute>) {
+        self.log(LogLevel::WARNING, message, None, attrs);
+    }
+
+    pub fn info_with_attrs(&self, message: &str, attrs: impl IntoIterator<Item = Attribute>) {
+        self.log(LogLevel::INFO, message, None, attrs);
+    }
+
+    pub fn error_with_attrs(&self, message: &str, attrs: impl IntoIterator<Item = Attribute>) {
+        self.log(LogLevel::ERROR, message, None, attrs);
+    }
+
+    pub fn shutdown(&self) -> std::io::Result<()> {
+        self.inner.stop_signal.store(true, Ordering::SeqCst);
+
+        // Only one thread should join the worker
+        if let Ok(mut handle) = self.inner.worker_handle.lock() {
+            if let Some(h) = handle.take() {
+                let _ = h.join();
+            }
         }
         Ok(())
     }
@@ -110,7 +145,7 @@ impl Logger {
             attributes: map,
         };
 
-        if let Err(_e) = self.tx.send(log_message) {}
+        if let Err(_e) = self.inner.tx.send(log_message) {}
 
         self.log_passthrough(level, message, err);
     }
