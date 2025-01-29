@@ -8,7 +8,24 @@ This is the Rust SDK for the Vigilant platform.
 cargo add vigilant
 ```
 
-## Usage (Logger)
+## Usage (with log crate)
+
+```rust
+use log::info;
+use vigilant::EnvLoggerAdapter;
+
+let logger = EnvLoggerAdapter::builder()
+  .name("rust-service")
+  .token("tk_1234567890")
+  .build()
+  .expect("Failed to initialize logger");
+
+info!("Hello, world!");
+
+logger.shutdown().expect("Failed to shutdown logger");
+```
+
+## Usage (standard logger)
 
 ```rust
 use vigilant::LoggerBuilder;
