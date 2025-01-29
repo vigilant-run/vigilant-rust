@@ -1,37 +1,37 @@
 use crate::logger::Logger;
 
-pub struct LoggerBuilder {
-    name: String,
-    endpoint: String,
-    token: String,
+pub struct LoggerBuilder<'a> {
+    name: &'a str,
+    endpoint: &'a str,
+    token: &'a str,
     passthrough: bool,
     insecure: bool,
     noop: bool,
 }
 
-impl LoggerBuilder {
+impl<'a> LoggerBuilder<'a> {
     pub fn new() -> Self {
         Self {
-            name: "sample-app".to_string(),
-            endpoint: "ingress.vigilant.run".to_string(),
-            token: "tk_1234567890".to_string(),
+            name: "sample-app",
+            endpoint: "ingress.vigilant.run",
+            token: "tk_1234567890",
             passthrough: false,
             insecure: false,
             noop: false,
         }
     }
 
-    pub fn name(mut self, name: String) -> Self {
+    pub fn name(mut self, name: &'a str) -> Self {
         self.name = name;
         self
     }
 
-    pub fn endpoint(mut self, endpoint: String) -> Self {
+    pub fn endpoint(mut self, endpoint: &'a str) -> Self {
         self.endpoint = endpoint;
         self
     }
 
-    pub fn token(mut self, token: String) -> Self {
+    pub fn token(mut self, token: &'a str) -> Self {
         self.token = token;
         self
     }
